@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "teamly-article-webhook"
+version = "0.1.0"
+description = "Webhook listener for Teamly article events (create, publish, archive, etc.)."
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["fastapi", "webhooks", "teamly"]
+packages = [
+  {include = "app"}
+]
+
+[tool.poetry.dependencies]
+python = ">=3.12.7,<4.0"
+fastapi = "^0.111.0"  # whichever is current
+pydantic = "^2.7"
+pydantic-settings = "^2.2"
+uvicorn = {extras = ["standard"], version = "^0.30.1"}
+structlog = "^24.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+anyio = "^4.0"        # NEW ─ gives you the pytest «anyio» plugin
+pytest-cov = "^5.0"
+httpx = "^0.27"
+black = "^24.4"
+ruff = "^0.4.4"
+isort = "^5.13"
+mypy = "^1.10"
+trio = "^0.25"
+
+[build-system]
+requires = ["poetry-core>=1.9"]
+build-backend = "poetry.core.masonry.api"
