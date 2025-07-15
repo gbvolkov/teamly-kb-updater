@@ -12,4 +12,4 @@ router = APIRouter(prefix="/v1", tags=["webhook"])
 async def handle_webhook(
     payload: Annotated[ArticleEvent, Body(discriminator="action")]
 ):
-    await dispatch(payload)        
+    await dispatch(payload)
