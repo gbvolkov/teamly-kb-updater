@@ -7,7 +7,7 @@ from app.schemas.article import (
     ArticleStatusChangeEvent,
 )
 
-logger = logging.getLogger(__name__)     # ← renamed
+logger = logging.getLogger(__name__)     
 
 
 @dispatcher.register("article", "create")
