@@ -1,0 +1,13 @@
+[req]
+prompt             = no
+distinguished_name = dn
+x509_extensions    = ext
+
+[dn]
+CN = 10.6.130.69                
+
+[ext]
+subjectAltName = @alt
+
+[alt]
+IP.1 = 10.6.130.69              
