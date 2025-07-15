@@ -1,87 +1,49 @@
-"""app/core/dispatcher.py
-
-Central routing for Teamly webhook events.
-
-* Validates incoming payloads (dict) against the union `ArticleEvent`
-  using `pydantic.TypeAdapter` (works with `typing.Union`).
-* Maps the `(entityType, action)` pair to a handler previously registered
-  via the `@register` decorator.
-* Executes the handler whether it is `async def` or plain `def`,
-  off‑loading sync functions to a worker thread so the event‑loop
-  remains unblocked.
-
-The module is **MyPy‑strict clean** with Python ≥ 3.12.
-"""
-from __future__ import annotations
-
-#import asyncio
-import anyio 
+# app/core/dispatcher.py
+from typing import Any, Awaitable, Callable, Dict, Tuple, Union, TypeVar
+from pydantic import BaseModel
+import anyio
 import inspect
 import logging
-from typing import Any, Awaitable, Callable, Dict, Tuple
 
-from pydantic import ValidationError, TypeAdapter
+log = logging.getLogger(__name__)
 
-from app.schemas.article import Action, ArticleEvent
+T = TypeVar("T", bound=BaseModel)
+Payload = Union[BaseModel, Dict[str, Any]]
 
-logger = logging.getLogger(__name__)
+Handler = Callable[[Payload], Awaitable[None]]
 
-# ────────────────────────────────────────────
-# Type aliases
-# ────────────────────────────────────────────
-Handler = Callable[[ArticleEvent], Awaitable[None] | None]
-Key = Tuple[str, Action]
+_HANDLERS: Dict[Tuple[str, str], Handler] = {}
 
-# Registry mapping (entity_type, action) → handler
-_registry: Dict[Key, Handler] = {}
 
-# ────────────────────────────────────────────
-# Decorator for registration
-# ────────────────────────────────────────────
-
-def register(entity_type: str, *actions: Action) -> Callable[[Handler], Handler]:
-    """Decorator to bind one or more *actions* for an *entity* to a handler."""
-
-    if not actions:
-        raise ValueError("@register requires at least one Action argument")
-
-    def decorator(func: Handler) -> Handler:
-        for action in actions:
-            key: Key = (entity_type, action)
-            if key in _registry:
-                raise ValueError(
-                    f"Handler already registered for {key}: {_registry[key]}"
-                )
-            _registry[key] = func
-            logger.debug("Registered handler %s → %s", key, func.__qualname__)
+def register(entity: str, action: str) -> Callable[[Handler], Handler]:
+    """
+    Decorator: register `async def handler(payload)` for an (entity, action) key.
+    The payload may be a Pydantic model **or** a plain dict.
+    """
+    def wrapper(func: Handler) -> Handler:
+        _HANDLERS[(entity, action)] = func
         return func
+    return wrapper
 
-    return decorator
 
-
-# ────────────────────────────────────────────
-# Public dispatch function
-# ────────────────────────────────────────────
-
-async def dispatch(event_dict: dict[str, Any], *, registry=_registry) -> None:
+async def dispatch(payload: Payload) -> None:
     """
-    Validate **event_dict** against the Article schema and run the matching
-    handler.  Raises:
-      * pydantic.ValidationError – bad schema  → HTTP 422
-      * ValueError               – unknown action → HTTP 400
-    """
-    # 1) schema validation
-    event: ArticleEvent = TypeAdapter(ArticleEvent).validate_python(event_dict)  # type: ignore[assignment]
+    Route the payload to its handler.
 
-    # 2) handler lookup
+    * Accepts either a raw dict (old behaviour) or a Pydantic model.
+    * If it’s a model we keep it **as-is** so handlers get type safety.
+    """
+    # Make a dict-view regardless of the original type
+    data = payload.model_dump() if isinstance(payload, BaseModel) else payload
+
     try:
-        handler = registry[(event.entityType, event.action)]
-    except KeyError as exc:
-        raise ValueError(f"No handler registered for {(event.entityType, event.action)!r}") from exc
+        key = (data["entityType"], data["action"])
+        handler = _HANDLERS[key]
+    except KeyError as exc:  # no such handler
+        raise ValueError(f"Unhandled event type: {key}") from exc
 
-    # 3) run it (async-aware)
+    # Call the handler.  If it’s sync, run it in a worker thread.
     if inspect.iscoroutinefunction(handler):
-        await handler(event)
+        await handler(payload)          # async handler
     else:
-        #await asyncio.to_thread(handler, event)
-        await anyio.to_thread.run_sync(handler, event)
+        await anyio.to_thread.run_sync(handler, payload)  # sync handler
