@@ -5,3 +5,5 @@ data
 logs
 .env
 .mypy*
+*.key
+*.crt
