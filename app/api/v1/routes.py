@@ -10,12 +10,6 @@ router = APIRouter(prefix="/v1", tags=["webhook"])
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def handle_webhook(
-    payload: Annotated[
-        ArticleEvent,                     # Union of the three concrete models
-        Body(                             # tell FastAPI how to discriminate
-            discriminator="action"        # ← field present in every variant
-        ),
-    ]
+    payload: Annotated[ArticleEvent, Body(discriminator="action")]
 ):
-    # If you still want to reuse your dispatcher, pass the *model* or dict:
-    await dispatch(payload.model_dump())   # or adapt dispatcher to take the model
+    await dispatch(payload)        
